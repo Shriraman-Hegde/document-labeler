@@ -1,0 +1,31 @@
+services:
+  llama:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "8080:8080"
+    # Place a Qwen-class GGUF at models/model.gguf (scripts/fetch-model.sh)
+    command:
+      - -m
+      - /models/model.gguf
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - -c
+      - "2048"
+
+  digitizer:
+    build: .
+    volumes:
+      - ./:/data
+    working_dir: /data
+    environment:
+      DIGITIZER_LLAMA_URL: http://llama:8080
+      DIGITIZER_MODEL: qwen
+    depends_on:
+      - llama
+    profiles: ["tools"]
+    entrypoint: ["digitizer"]
+    command: ["help"]

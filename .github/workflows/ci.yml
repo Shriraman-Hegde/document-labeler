@@ -13,9 +13,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22.x"
+      - name: Install Tesseract
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
       - name: Test
         env:
           DIGITIZER_ALLOW_STUB: "1"
         run: go test ./...
       - name: Build
         run: go build -o bin/digitizer ./cmd/digitizer
+      - name: Smoke scan fixtures
+        env:
+          DIGITIZER_ALLOW_STUB: "1"
+        run: |
+          go build -o bin/digitizer ./cmd/digitizer
+          ./bin/digitizer scan --dept stores --root /tmp/ci-smoke testdata/fixtures/invoice.png
+          ./bin/digitizer scan --dept stores --root /tmp/ci-smoke testdata/fixtures/packing_slip.png
+

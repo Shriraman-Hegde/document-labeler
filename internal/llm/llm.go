@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// Client talks to a llama.cpp-compatible HTTP server or a test stub.
+// Client talks to a llama.cpp-compatible OpenAI HTTP server or a test stub.
 type Client struct {
 	BaseURL    string
+	Model      string
 	AllowStub  bool
 	HTTPClient *http.Client
 }
@@ -21,14 +24,71 @@ type Client struct {
 func ConfigFromEnv() (*Client, error) {
 	stub := os.Getenv("DIGITIZER_ALLOW_STUB") == "1"
 	url := strings.TrimSpace(os.Getenv("DIGITIZER_LLAMA_URL"))
+	model := strings.TrimSpace(os.Getenv("DIGITIZER_MODEL"))
+	if model == "" {
+		model = "qwen"
+	}
 	if url == "" && !stub {
-		return nil, fmt.Errorf("DIGITIZER_LLAMA_URL is required (or set DIGITIZER_ALLOW_STUB=1 for tests)")
+		return nil, fmt.Errorf("DIGITIZER_LLAMA_URL is required (point at llama.cpp server, e.g. http://127.0.0.1:8080); or set DIGITIZER_ALLOW_STUB=1 for tests")
+	}
+	timeout := 120 * time.Second
+	if v := os.Getenv("DIGITIZER_LLM_TIMEOUT_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeout = time.Duration(n) * time.Second
+		}
 	}
 	return &Client{
 		BaseURL:    strings.TrimRight(url, "/"),
+		Model:      model,
 		AllowStub:  stub,
-		HTTPClient: &http.Client{Timeout: 120 * time.Second},
+		HTTPClient: &http.Client{Timeout: timeout},
 	}, nil
+}
+
+// Ready checks the llama.cpp server is reachable (skipped for stub-only).
+func (c *Client) Ready() error {
+	if c.BaseURL == "" {
+		if c.AllowStub {
+			return nil
+		}
+		return fmt.Errorf("llm base URL empty")
+	}
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/health", nil)
+	if err != nil {
+		return err
+	}
+	res, err := c.HTTPClient.Do(req)
+	if err != nil {
+		// Some llama.cpp builds expose /v1/models instead of /health.
+		return c.readyModels()
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 200 && res.StatusCode < 500 {
+		return nil
+	}
+	return c.readyModels()
+}
+
+func (c *Client) readyModels() error {
+	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/v1/models", nil)
+	if err != nil {
+		return err
+	}
+	res, err := c.HTTPClient.Do(req)
+	if err != nil {
+		if c.AllowStub {
+			return nil
+		}
+		return fmt.Errorf("llm unreachable at %s: %w (start llama.cpp or set DIGITIZER_ALLOW_STUB=1)", c.BaseURL, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		if c.AllowStub {
+			return nil
+		}
+		return fmt.Errorf("llm health check failed: %s", res.Status)
+	}
+	return nil
 }
 
 // AssistRequest is typing/schema help input.
@@ -52,13 +112,17 @@ func (c *Client) Assist(req AssistRequest) (AssistResponse, error) {
 		return stubAssist(req), nil
 	}
 	body := map[string]any{
+		"model": c.Model,
 		"messages": []map[string]string{
-			{"role": "system", "content": "You label manufacturing scans. Reply JSON only: {\"docType\",\"confidence\",\"headings\",\"improvedText\"}. docType snake_case."},
-			{"role": "user", "content": fmt.Sprintf("filename=%s weak=%v\nocr:\n%s", req.Filename, req.WeakOCR, truncate(req.OCRText, 4000))},
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": fmt.Sprintf("filename=%s weakOCR=%v\nocr:\n%s", req.Filename, req.WeakOCR, truncate(req.OCRText, 4000))},
 		},
 		"temperature": 0.1,
 	}
-	b, _ := json.Marshal(body)
+	b, err := json.Marshal(body)
+	if err != nil {
+		return AssistResponse{}, err
+	}
 	httpReq, err := http.NewRequest(http.MethodPost, c.BaseURL+"/v1/chat/completions", bytes.NewReader(b))
 	if err != nil {
 		return AssistResponse{}, err
@@ -69,14 +133,15 @@ func (c *Client) Assist(req AssistRequest) (AssistResponse, error) {
 		if c.AllowStub {
 			return stubAssist(req), nil
 		}
-		return AssistResponse{}, err
+		return AssistResponse{}, fmt.Errorf("llm request failed: %w", err)
 	}
 	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
 	if res.StatusCode >= 300 {
 		if c.AllowStub {
 			return stubAssist(req), nil
 		}
-		return AssistResponse{}, fmt.Errorf("llm http %s", res.Status)
+		return AssistResponse{}, fmt.Errorf("llm http %s: %s", res.Status, truncate(string(raw), 200))
 	}
 	var parsed struct {
 		Choices []struct {
@@ -85,23 +150,31 @@ func (c *Client) Assist(req AssistRequest) (AssistResponse, error) {
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
-		return AssistResponse{}, err
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return AssistResponse{}, fmt.Errorf("llm response decode: %w", err)
 	}
 	if len(parsed.Choices) == 0 {
 		return AssistResponse{}, fmt.Errorf("empty llm response")
 	}
-	content := parsed.Choices[0].Message.Content
-	content = extractJSON(content)
+	content := extractJSON(parsed.Choices[0].Message.Content)
 	var out AssistResponse
 	if err := json.Unmarshal([]byte(content), &out); err != nil {
 		if c.AllowStub {
 			return stubAssist(req), nil
 		}
-		return AssistResponse{}, fmt.Errorf("parse llm json: %w", err)
+		return AssistResponse{}, fmt.Errorf("parse llm json: %w (content=%s)", err, truncate(content, 120))
+	}
+	if out.DocType == "" {
+		out.DocType = "unknown"
 	}
 	return out, nil
 }
+
+const systemPrompt = `You label manufacturing document scans.
+Reply with JSON only, no markdown fences:
+{"docType":"snake_case","confidence":0.0,"headings":["..."],"improvedText":"..."}
+docType must be one of: invoice, purchase_order, packing_slip, goods_receipt, inspection_report, unknown.
+If weakOCR is true, put cleaned readable text in improvedText; otherwise leave improvedText empty.`
 
 func stubAssist(req AssistRequest) AssistResponse {
 	text := strings.ToLower(req.OCRText + " " + req.Filename)
@@ -112,7 +185,7 @@ func stubAssist(req AssistRequest) AssistResponse {
 	candidates := []guess{
 		{"invoice", []string{"invoice"}},
 		{"purchase_order", []string{"purchase order", "po number", "po#"}},
-		{"packing_slip", []string{"packing", "packing slip"}},
+		{"packing_slip", []string{"packing slip", "packing"}},
 		{"goods_receipt", []string{"goods receipt", "grn"}},
 		{"inspection_report", []string{"inspection", "coa"}},
 	}
