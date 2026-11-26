@@ -37,6 +37,17 @@ export DIGITIZER_ALLOW_STUB=1
 ./bin/digitizer scan --dept stores --root . testdata/fixtures/invoice.png
 ```
 
+## OCR (phone photos)
+
+Before Tesseract, images are normalized: EXIF orientation, grayscale, contrast, sharpen, max-edge resize. Low-confidence and symbol-only tokens are dropped.
+
+| Env | Default | Purpose |
+| --- | --- | --- |
+| `DIGITIZER_TESSERACT_PSM` | `4` | Tesseract page segmentation |
+| `DIGITIZER_OCR_MIN_CONF` | `0.40` | Drop tokens below this confidence |
+| `DIGITIZER_OCR_MAX_EDGE` | `2400` | Long-edge cap before OCR |
+| `DIGITIZER_OCR_CONTRAST` | `18` | Contrast boost amount |
+
 ## HTTP API (UI is a separate repo)
 
 ```bash
