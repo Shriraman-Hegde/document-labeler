@@ -49,7 +49,7 @@ export DIGITIZER_ALLOW_STUB=1   # or DIGITIZER_LLAMA_URL=...
 - `GET /v1/relate?dept=stores`
 - CORS enabled for a separately hosted UI
 
-Point the UI at this origin (e.g. `DIGITIZER_API=http://127.0.0.1:8091`).
+**UI:** [document-labeler-modules-ui](https://github.com/Shriraman-Hegde/document-labeler-modules-ui) (Lit.js modules). Point it at this origin (`http://127.0.0.1:8091` or `?api=`).
 
 ## Docker digitizer binary
 
