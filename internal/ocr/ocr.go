@@ -42,19 +42,50 @@ func (r Result) Weak(minMean float64, minTokens int) bool {
 	return r.MeanConfidence() < minMean
 }
 
-// RunTesseract runs tesseract TSV on an image path.
+// RunTesseract preprocesses the image then runs tesseract TSV.
 func RunTesseract(imagePath string, page int) (Result, error) {
-	cmd := exec.Command("tesseract", imagePath, "stdout", "--psm", "6", "tsv")
+	clean, cleanup, err := PrepareImage(imagePath)
+	if err != nil {
+		// Non-image paths (or decode failures): fall back to raw file for fixtures/PDFs.
+		return runTesseractFile(imagePath, page)
+	}
+	defer cleanup()
+	return runTesseractFile(clean, page)
+}
+
+func runTesseractFile(imagePath string, page int) (Result, error) {
+	psm := tesseractPSM()
+	cmd := exec.Command("tesseract", imagePath, "stdout", "--psm", psm, "tsv")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return Result{}, fmt.Errorf("tesseract: %w (%s)", err, strings.TrimSpace(stderr.String()))
 	}
-	return parseTSV(stdout.String(), page)
+	return parseTSV(stdout.String(), page, minTokenConf())
 }
 
-func parseTSV(tsv string, page int) (Result, error) {
+func tesseractPSM() string {
+	if v := strings.TrimSpace(os.Getenv("DIGITIZER_TESSERACT_PSM")); v != "" {
+		return v
+	}
+	// 4 = assume a single column of text of variable sizes — better for phone photos of statements/forms.
+	return "4"
+}
+
+func minTokenConf() float64 {
+	v := os.Getenv("DIGITIZER_OCR_MIN_CONF")
+	if v == "" {
+		return 0.40
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0.40
+	}
+	return f
+}
+
+func parseTSV(tsv string, page int, minConf float64) (Result, error) {
 	lines := strings.Split(tsv, "\n")
 	var tokens []Token
 	var parts []string
@@ -66,7 +97,6 @@ func parseTSV(tsv string, page int) (Result, error) {
 		if len(cols) < 12 {
 			continue
 		}
-		// level text is last column; conf is index 10
 		level, _ := strconv.Atoi(cols[0])
 		if level != 5 { // word
 			continue
@@ -79,10 +109,47 @@ func parseTSV(tsv string, page int) (Result, error) {
 		if conf < 0 {
 			continue
 		}
-		tokens = append(tokens, Token{Text: text, Confidence: conf / 100.0, Page: page})
+		c := conf / 100.0
+		if c < minConf {
+			continue
+		}
+		if looksLikeNoise(text) {
+			continue
+		}
+		tokens = append(tokens, Token{Text: text, Confidence: c, Page: page})
 		parts = append(parts, text)
 	}
 	return Result{Tokens: tokens, Text: strings.Join(parts, " ")}, nil
+}
+
+func looksLikeNoise(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return true
+	}
+	if len(s) == 1 {
+		switch s {
+		case "|", "/", "\\", "_", "-", ".", ",", "'", "`", "~", "*", "•", "—", "–", "«", "»":
+			return true
+		}
+	}
+	letters := 0
+	symbols := 0
+	for _, r := range s {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			letters++
+		default:
+			symbols++
+		}
+	}
+	if letters == 0 {
+		return true
+	}
+	if len(s) >= 4 && symbols*2 >= letters {
+		return true
+	}
+	return false
 }
 
 // Available reports whether tesseract is on PATH.

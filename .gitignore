@@ -7,3 +7,5 @@ values/
 models/*.gguf
 models/*.partial
 .env
+testdata/.ocr-tmp/
+testdata/.ocr-tmp/
