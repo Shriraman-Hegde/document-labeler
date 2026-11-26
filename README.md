@@ -2,6 +2,8 @@
 
 Go manufacturing document digitizer: PDF/PNG/JPEG → reusable schemas + value files.
 
+**Production docs (application, SDLC, reports):** [docs/prod/](./docs/prod/)
+
 ## Requirements
 
 - Go 1.22+
