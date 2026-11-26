@@ -10,6 +10,7 @@ import (
 	"github.com/Shriraman-Hegde/document-labeler/internal/engine"
 	"github.com/Shriraman-Hegde/document-labeler/internal/ingest"
 	"github.com/Shriraman-Hegde/document-labeler/internal/llm"
+	"github.com/Shriraman-Hegde/document-labeler/internal/relate"
 	"github.com/Shriraman-Hegde/document-labeler/internal/schema"
 )
 
@@ -34,6 +35,8 @@ func Run(args []string) int {
 		return cmdAccept(args[1:])
 	case "conflicts":
 		return cmdConflicts(args[1:])
+	case "relate":
+		return cmdRelate(args[1:])
 	case "watch":
 		return cmdWatch(args[1:])
 	default:
@@ -51,6 +54,7 @@ Usage:
   digitizer watch --dept <name> [--once] [--root <dir>]
   digitizer accept --dept <name> --type <docType> [--root <dir>]
   digitizer conflicts --dept <name> [--root <dir>]
+  digitizer relate [--dept <name>] [--root <dir>] [--all-depts]
   digitizer version
 
 Modes: fully_learned | seeded_extensible | known_dynamic
@@ -147,7 +151,49 @@ func cmdScan(args []string) int {
 		}
 		results = append(results, o)
 	}
-	_ = enc.Encode(results)
+	docs, err := relate.LoadValueDir(root, dept)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	rel := relate.Build(docs)
+	_ = enc.Encode(map[string]any{
+		"documents": results,
+		"relations": rel.Relations,
+		"checks":    rel.Checks,
+	})
+	return 0
+}
+
+func cmdRelate(args []string) int {
+	root, args := rootFlag(args)
+	all := false
+	rest := args[:0:0]
+	for _, a := range args {
+		if a == "--all-depts" {
+			all = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+	dept := ""
+	if !all {
+		var err error
+		dept, rest, err = deptFlag(rest)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+	}
+	docs, err := relate.LoadValueDir(root, dept)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	out := relate.Build(docs)
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(out)
 	return 0
 }
 
