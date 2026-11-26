@@ -371,7 +371,7 @@ func cmdServe(args []string) int {
 		return 1
 	}
 	cfg := server.Config{Addr: addr, Root: root, LLM: client}
-	fmt.Fprintf(os.Stderr, "digitizer UI at http://127.0.0.1%s\n", addr)
+	fmt.Fprintf(os.Stderr, "digitizer API at http://127.0.0.1%s (UI is a separate repo)\n", addr)
 	if err := http.ListenAndServe(addr, server.Handler(cfg)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

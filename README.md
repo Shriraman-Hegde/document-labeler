@@ -37,15 +37,19 @@ export DIGITIZER_ALLOW_STUB=1
 ./bin/digitizer scan --dept stores --root . testdata/fixtures/invoice.png
 ```
 
-## Web UI (camera + upload)
+## HTTP API (UI is a separate repo)
 
 ```bash
 export DIGITIZER_ALLOW_STUB=1   # or DIGITIZER_LLAMA_URL=...
 ./bin/digitizer serve --addr :8091 --root .
 ```
 
-Open http://127.0.0.1:8091 — enable the camera or upload PNG/JPEG/PDF, set the department, then Scan.  
-API: `POST /v1/scan` (multipart `dept`, `file`), `GET /v1/relate?dept=stores`, `GET /health`.
+- `GET /health`
+- `POST /v1/scan` — multipart fields `dept`, optional `mode`, `file` (png/jpeg/pdf)
+- `GET /v1/relate?dept=stores`
+- CORS enabled for a separately hosted UI
+
+Point the UI at this origin (e.g. `DIGITIZER_API=http://127.0.0.1:8091`).
 
 ## Docker digitizer binary
 

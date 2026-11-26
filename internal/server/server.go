@@ -13,7 +13,6 @@ import (
 	"github.com/Shriraman-Hegde/document-labeler/internal/llm"
 	"github.com/Shriraman-Hegde/document-labeler/internal/relate"
 	"github.com/Shriraman-Hegde/document-labeler/internal/schema"
-	"github.com/Shriraman-Hegde/document-labeler/web"
 )
 
 // Config for the HTTP server.
@@ -23,7 +22,7 @@ type Config struct {
 	LLM  *llm.Client
 }
 
-// Handler returns the HTTP mux.
+// Handler returns the API mux (UI lives in a separate repo).
 func Handler(cfg Config) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -49,8 +48,20 @@ func Handler(cfg Config) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, relate.Build(docs))
 	})
-	mux.Handle("/", web.Handler())
-	return mux
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{
+			"service": "document-labeler",
+			"ui":      "hosted separately — set DIGITIZER_API on the UI to this origin",
+			"health":  "/health",
+			"scan":    "POST /v1/scan",
+			"relate":  "GET /v1/relate?dept=",
+		})
+	})
+	return withCORS(mux)
 }
 
 func handleScan(w http.ResponseWriter, r *http.Request, cfg Config) {

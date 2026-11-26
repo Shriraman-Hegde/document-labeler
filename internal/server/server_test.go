@@ -64,7 +64,7 @@ func TestScanUpload(t *testing.T) {
 	}
 }
 
-func TestUIIndex(t *testing.T) {
+func TestAPIIndex(t *testing.T) {
 	t.Setenv("DIGITIZER_ALLOW_STUB", "1")
 	client, _ := llm.ConfigFromEnv()
 	h := Handler(Config{Root: t.TempDir(), LLM: client})
@@ -74,7 +74,23 @@ func TestUIIndex(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status %d", rr.Code)
 	}
-	if !bytes.Contains(rr.Body.Bytes(), []byte("Digitizer")) {
-		t.Fatal("expected UI markup")
+	if !bytes.Contains(rr.Body.Bytes(), []byte("document-labeler")) {
+		t.Fatal("expected API index JSON")
+	}
+}
+
+func TestCORSPreflight(t *testing.T) {
+	t.Setenv("DIGITIZER_ALLOW_STUB", "1")
+	client, _ := llm.ConfigFromEnv()
+	h := Handler(Config{Root: t.TempDir(), LLM: client})
+	req := httptest.NewRequest(http.MethodOptions, "/v1/scan", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status %d", rr.Code)
+	}
+	if rr.Header().Get("Access-Control-Allow-Origin") == "" {
+		t.Fatal("missing CORS header")
 	}
 }
