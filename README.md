@@ -37,6 +37,20 @@ export DIGITIZER_ALLOW_STUB=1
 ./bin/digitizer scan --dept stores --root . testdata/fixtures/invoice.png
 ```
 
+## HTTP API (UI is a separate repo)
+
+```bash
+export DIGITIZER_ALLOW_STUB=1   # or DIGITIZER_LLAMA_URL=...
+./bin/digitizer serve --addr :8091 --root .
+```
+
+- `GET /health`
+- `POST /v1/scan` — multipart fields `dept`, optional `mode`, `file` (png/jpeg/pdf)
+- `GET /v1/relate?dept=stores`
+- CORS enabled for a separately hosted UI
+
+**UI:** [document-labeler-modules-ui](https://github.com/Shriraman-Hegde/document-labeler-modules-ui) (Lit.js modules). Point it at this origin (`http://127.0.0.1:8091` or `?api=`).
+
 ## Docker digitizer binary
 
 ```bash
@@ -92,4 +106,4 @@ Relation kinds include `invoice_for_po`, `shipment_for_po`, `receipt_for_po`, `r
 
 ## Not in scope
 
-Product UI, n8n as the OCR engine.
+n8n as the OCR engine.

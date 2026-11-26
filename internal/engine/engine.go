@@ -24,12 +24,12 @@ type Config struct {
 
 // Outcome is one file result.
 type Outcome struct {
-	Source     string
-	ValuePath  string
-	Type       schema.DocType
-	Mode       schema.Mode
-	Rescan     bool
-	Message    string
+	Source    string         `json:"source"`
+	ValuePath string         `json:"valuePath"`
+	Type      schema.DocType `json:"type"`
+	Mode      schema.Mode    `json:"mode"`
+	Rescan    bool           `json:"rescan"`
+	Message   string         `json:"message"`
 }
 
 func envFloat(key string, def float64) float64 {
