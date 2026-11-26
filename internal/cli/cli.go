@@ -56,9 +56,11 @@ Usage:
 Modes: fully_learned | seeded_extensible | known_dynamic
 
 Env:
-  DIGITIZER_LLAMA_URL     llama.cpp OpenAI-compatible base URL (required)
-  DIGITIZER_ALLOW_STUB=1  allow heuristic stub without LLM (tests/dev)
-  DIGITIZER_MODE          default mode override
+  DIGITIZER_LLAMA_URL        llama.cpp OpenAI-compatible base URL (required)
+  DIGITIZER_MODEL            model id sent to the server (default: qwen)
+  DIGITIZER_LLM_TIMEOUT_SEC  HTTP timeout seconds (default: 120)
+  DIGITIZER_ALLOW_STUB=1     allow heuristic stub without LLM (tests/dev)
+  DIGITIZER_MODE             default mode override
 `)
 }
 
@@ -126,6 +128,10 @@ func cmdScan(args []string) int {
 	}
 	client, err := llm.ConfigFromEnv()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if err := client.Ready(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -231,6 +237,10 @@ func cmdWatch(args []string) int {
 	}
 	client, err := llm.ConfigFromEnv()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if err := client.Ready(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

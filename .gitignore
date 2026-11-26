@@ -4,5 +4,6 @@
 inbox/
 labelled/
 values/
-*.gguf
+models/*.gguf
+models/*.partial
 .env
