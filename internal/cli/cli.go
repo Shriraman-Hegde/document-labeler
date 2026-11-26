@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/Shriraman-Hegde/document-labeler/internal/llm"
 	"github.com/Shriraman-Hegde/document-labeler/internal/relate"
 	"github.com/Shriraman-Hegde/document-labeler/internal/schema"
+	"github.com/Shriraman-Hegde/document-labeler/internal/server"
 )
 
 const version = "0.1.0"
@@ -39,6 +41,8 @@ func Run(args []string) int {
 		return cmdRelate(args[1:])
 	case "watch":
 		return cmdWatch(args[1:])
+	case "serve":
+		return cmdServe(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\n", args[0])
 		printHelp()
@@ -55,6 +59,7 @@ Usage:
   digitizer accept --dept <name> --type <docType> [--root <dir>]
   digitizer conflicts --dept <name> [--root <dir>]
   digitizer relate [--dept <name>] [--root <dir>] [--all-depts]
+  digitizer serve [--addr :8091] [--root <dir>]
   digitizer version
 
 Modes: fully_learned | seeded_extensible | known_dynamic
@@ -338,6 +343,36 @@ func cmdWatch(args []string) int {
 	}
 	fmt.Fprintf(os.Stderr, "watching %s (Ctrl+C to stop)\n", inbox)
 	if err := ingest.WatchDir(inbox, processInbox); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
+}
+
+func cmdServe(args []string) int {
+	root, args := rootFlag(args)
+	addr := ":8091"
+	rest := args[:0:0]
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--addr" && i+1 < len(args) {
+			addr = args[i+1]
+			i++
+			continue
+		}
+		rest = append(rest, args[i])
+	}
+	client, err := llm.ConfigFromEnv()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if err := client.Ready(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	cfg := server.Config{Addr: addr, Root: root, LLM: client}
+	fmt.Fprintf(os.Stderr, "digitizer UI at http://127.0.0.1%s\n", addr)
+	if err := http.ListenAndServe(addr, server.Handler(cfg)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
