@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -204,7 +205,26 @@ func fieldsFromText(text string, t schema.DocType, cat *schema.Catalog) []label.
 		}
 		out = append(out, fv)
 	}
+	// Fill quantity from OCR when the field is still empty.
+	for i := range out {
+		if out[i].Key == "quantity" && out[i].Text == "" {
+			if q := quantityFromOCR(text); q != "" {
+				out[i].Text = q
+				out[i].Confidence = 0.85
+			}
+		}
+	}
 	return out
+}
+
+var qtyOCR = regexp.MustCompile(`(?i)\bquantity[\s#:.-]*(\d+(?:\.\d+)?)`)
+
+func quantityFromOCR(text string) string {
+	m := qtyOCR.FindStringSubmatch(text)
+	if len(m) > 1 {
+		return m[1]
+	}
+	return ""
 }
 
 func countHeadingish(text string) int {

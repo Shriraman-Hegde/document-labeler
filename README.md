@@ -79,6 +79,17 @@ mkdir -p inbox/stores
 
 `fully_learned` | `seeded_extensible` | `known_dynamic` — auto-selected; override with `--mode` or `DIGITIZER_MODE`.
 
+## Relate / quantity checks
+
+After scanning one or more files, `scan` also emits typed `relations` and quantity `checks` from labeled value files in that department.
+
+```bash
+./bin/digitizer relate --dept stores --root .
+./bin/digitizer relate --all-depts --root .   # cross-dept links only for promoted types
+```
+
+Relation kinds include `invoice_for_po`, `shipment_for_po`, `receipt_for_po`, `receipt_for_shipment`, `same_po`, `same_part`, `same_lot`, and related variants. Quantity roles: ordered / invoiced / shipped / received / inspected.
+
 ## Not in scope
 
-Product UI, typed document relations / quantity checks, n8n as the OCR engine.
+Product UI, n8n as the OCR engine.
