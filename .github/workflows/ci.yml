@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  push:
+    branches: [main, feat/**]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+      - name: Test
+        env:
+          DIGITIZER_ALLOW_STUB: "1"
+        run: go test ./...
+      - name: Build
+        run: go build -o bin/digitizer ./cmd/digitizer
