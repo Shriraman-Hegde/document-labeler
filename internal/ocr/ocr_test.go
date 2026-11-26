@@ -50,3 +50,18 @@ func TestWeakGate(t *testing.T) {
 		t.Fatal("expected weak")
 	}
 }
+
+func TestParseTSVDropsNoise(t *testing.T) {
+	tsv := "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n" +
+		"5\t1\t0\t0\t0\t0\t0\t0\t1\t1\t90.0\tInvoice\n" +
+		"5\t1\t0\t0\t0\t1\t0\t0\t1\t1\t10.0\t~~!!\n" +
+		"5\t1\t0\t0\t0\t2\t0\t0\t1\t1\t80.0\t|\n" +
+		"5\t1\t0\t0\t0\t3\t0\t0\t1\t1\t85.0\tTotal\n"
+	r, err := parseTSV(tsv, 1, 0.40)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Text != "Invoice Total" {
+		t.Fatalf("got %q", r.Text)
+	}
+}
